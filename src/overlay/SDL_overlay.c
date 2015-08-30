@@ -128,6 +128,7 @@ static void _StopMapping()
         _this->joystick = NULL;
     }
     _ResetMappings();
+    SDL_Log("Mapping finished\n");
 }
 
 static int _SaveMappings()
@@ -179,13 +180,14 @@ static int _SaveMappings()
     }
     SDL_GameControllerAddMapping(bind);
     // TODO Save to file
+    SDL_Log("Mapping: %s\n", bind);
 }
 
 static int _EventFilter(void* userdata, SDL_Event* event)
 {
     CHECK_INIT(0)
-    if (_this->open) {
-        return 0;
+    if (!_this->open) {
+        return 1;
     }
 
     int joystick_id = -1;
@@ -195,10 +197,10 @@ static int _EventFilter(void* userdata, SDL_Event* event)
 
     switch(event->type) {
 //  Ignored Events
-    case SDL_JOYBUTTONDOWN:
+    case SDL_JOYBUTTONUP:
     case SDL_CONTROLLERBUTTONUP:
     case SDL_JOYBALLMOTION:
-        return 1;
+        return 0;
 //  
 //  Device changed
     case SDL_JOYDEVICEADDED:
@@ -234,7 +236,7 @@ static int _EventFilter(void* userdata, SDL_Event* event)
             bind.bindType = SDL_CONTROLLER_BINDTYPE_AXIS;
         }
         break;
-    case SDL_JOYBUTTONUP:
+    case SDL_JOYBUTTONDOWN:
         joystick_id = event->jbutton.which;
         bind.value.button = event->jbutton.button;
         bind.bindType = SDL_CONTROLLER_BINDTYPE_BUTTON;
@@ -244,7 +246,8 @@ static int _EventFilter(void* userdata, SDL_Event* event)
         bind.value.hat.hat = event->jhat.hat;
         bind.value.hat.hat_mask = event->jhat.value;
         bind.bindType = SDL_CONTROLLER_BINDTYPE_HAT;
-        default: break;
+        break;
+    default: break;
     }
     
     if (_this->is_mapping && joystick_id
@@ -255,23 +258,26 @@ static int _EventFilter(void* userdata, SDL_Event* event)
                           sizeof(SDL_GameControllerButtonBind)) == 0)
             {
                 ++_this->current_mapping_index;
+                SDL_Log("Mapping skipped\n");
             } else if (_this->current_mapping_index > PREV_BUTTON 
                 && memcmp(&bind, &_this->mappings[PREV_BUTTON].bind,
                           sizeof(SDL_GameControllerButtonBind)) == 0)
             {
                 --_this->current_mapping_index;
+                SDL_Log("Previous mapping\n");
             } else {
                 _this->mappings[_this->current_mapping_index].bind = bind;
                 ++_this->current_mapping_index;
+                SDL_Log("Next mapping\n");
             }
             if (_this->current_mapping_index >= NUM_MAPPINGS) {
                 _SaveMappings();
                 _StopMapping();
             }
-        return 1;
+        return 0;
     }
 
-    return 0;
+    return 1;
 }
 
 static void _CloseOverlay()
@@ -281,6 +287,7 @@ static void _CloseOverlay()
                            _this->currentEventFilterData);
     }    
 	_this->open = SDL_FALSE;
+    SDL_Log("Overlay closed\n");
 }
 
 void
@@ -311,6 +318,7 @@ OVL_OpenControllerOverlay(int id)
     CHECK_INIT(SDL_FALSE)
 
     if (_this->open) {
+        SDL_SetError("Already open");
         return SDL_FALSE;
     }
 
@@ -318,7 +326,16 @@ OVL_OpenControllerOverlay(int id)
     for (int i = 0; i < num_joysticks; ++i)
     {
         if (SDL_IsGameController(i)) {
-            return SDL_FALSE;
+            SDL_GameController *tmp_gamecontroller = SDL_GameControllerOpen(i);
+            SDL_Joystick *tmp_joystick = SDL_GameControllerGetJoystick(tmp_gamecontroller);  
+            if (id == SDL_JoystickInstanceID(tmp_joystick)) {
+                _this->joystick = tmp_joystick;
+                _this->controller = tmp_gamecontroller;
+                _this->current_joystick_id = id;
+                break;
+            } else {
+                SDL_GameControllerClose(tmp_gamecontroller);
+            }
         } else {
             SDL_Joystick * tmp_joystick = SDL_JoystickOpen(i);
             if (id == SDL_JoystickInstanceID(tmp_joystick)) {
@@ -332,6 +349,7 @@ OVL_OpenControllerOverlay(int id)
     } 
 
     if (_this->joystick == NULL) {
+        SDL_SetError("Cannot open invalid joystick");
         return SDL_FALSE;
     }
 
@@ -345,6 +363,8 @@ OVL_OpenControllerOverlay(int id)
     _ResetMappings();
 	_this->open = SDL_TRUE;
     _this->is_mapping = SDL_TRUE;
+    SDL_Log("Overlay opened\n");
+    return SDL_TRUE;
 }
 
 void
@@ -383,7 +403,7 @@ OVL_GL_SwapWindow(SDL_Window* window)
 }
 
 SDL_bool
-OVL_RendererPresent(SDL_Renderer* renderer)
+OVL_RenderPresent(SDL_Renderer* renderer)
 {
     CHECK_INIT(SDL_FALSE)
 
