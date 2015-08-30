@@ -40,6 +40,7 @@ struct OVL_Overlay
     SDL_Joystick* joystick;
     SDL_JoystickID current_joystick_id;
     int current_mapping_index;
+    SDL_bool duplicate_mapping;
 
     SDL_bool is_mapping;
 
@@ -57,6 +58,8 @@ static struct OVL_Overlay *_this = NULL;
 void _ResetMappings()
 {
     _this->current_mapping_index = 0;
+    _this->duplicate_mapping = SDL_FALSE;
+    SDL_Log("Current Mapping %d\n", _this->current_mapping_index);
 /*    _this->mappings = {SDL_CONTROLLER_BINDTYPE_BUTTON, SDL_CONTROLLER_BUTTON_START, EMPTY_BIND}
         {SDL_CONTROLLER_BINDTYPE_BUTTON, SDL_CONTROLLER_BUTTON_BACK, EMPTY_BIND}
         {SDL_CONTROLLER_BINDTYPE_BUTTON, SDL_CONTROLLER_BUTTON_DPAD_UP, EMPTY_BIND}
@@ -109,9 +112,6 @@ OVL_Init(const char* theme_dir, const char* language)
                         SDL_PIXELFORMAT_BGRA8888,
                         SDL_TEXTUREACCESS_TARGET,
                         800, 600);
-
-    SDL_SetRenderTarget(_this->overlay,
-                        _this->overlay_texture);
 
     return SDL_TRUE;
 }
@@ -191,6 +191,8 @@ static int _EventFilter(void* userdata, SDL_Event* event)
     }
 
     int joystick_id = -1;
+    static int last_event_time = 0;
+    int event_time = 0;
     SDL_GameControllerButtonBind bind;
     const int axis_deadzone = 32767/2;
     // Not thread safe!
@@ -220,6 +222,7 @@ static int _EventFilter(void* userdata, SDL_Event* event)
     case SDL_CONTROLLERAXISMOTION:
         if (abs(event->caxis.value) >= axis_deadzone) {
             joystick_id = event->caxis.which;
+            event_time = event->caxis.timestamp;
             bind = SDL_GameControllerGetBindForAxis(_this->controller,
                                                     event->caxis.axis);
         }
@@ -231,6 +234,7 @@ static int _EventFilter(void* userdata, SDL_Event* event)
         break;
     case SDL_JOYAXISMOTION:
         if (event->caxis.value >= axis_deadzone) {
+            event_time = event->caxis.timestamp;
             joystick_id = event->jaxis.which;
             bind.value.axis = event->jaxis.axis;
             bind.bindType = SDL_CONTROLLER_BINDTYPE_AXIS;
@@ -252,24 +256,44 @@ static int _EventFilter(void* userdata, SDL_Event* event)
     
     if (_this->is_mapping && joystick_id
         == _this->current_joystick_id) {
-            // TODO Prevent duplicate mappings
+            if (bind.bindType == SDL_CONTROLLER_BINDTYPE_AXIS) {
+                if ((event_time - last_event_time) < 1000) {
+                    return 0;
+                }
+                last_event_time = event_time;
+            }
+
             if (_this->current_mapping_index > NEXT_BUTTON 
                 && memcmp(&bind, &_this->mappings[NEXT_BUTTON].bind,
                           sizeof(SDL_GameControllerButtonBind)) == 0)
             {
                 ++_this->current_mapping_index;
-                SDL_Log("Mapping skipped\n");
+                SDL_Log("Mapping skipped - %d\n", _this->current_mapping_index);
             } else if (_this->current_mapping_index > PREV_BUTTON 
                 && memcmp(&bind, &_this->mappings[PREV_BUTTON].bind,
                           sizeof(SDL_GameControllerButtonBind)) == 0)
             {
                 --_this->current_mapping_index;
-                SDL_Log("Previous mapping\n");
+                SDL_Log("Previous mapping - %d\n", _this->current_mapping_index);
             } else {
+                for (int i = 0; i < NUM_MAPPINGS; ++i) {
+                    if (memcmp(&bind, &_this->mappings[i].bind,
+                          sizeof(SDL_GameControllerButtonBind)) == 0) {
+                        if (_this->duplicate_mapping == SDL_FALSE) {
+                            SDL_Log("Duplicate mapping");
+                        }
+                        _this->duplicate_mapping = SDL_TRUE;
+                        return 0;
+                    }
+                }
+
+                SDL_Log("Mapped - %d, %d\n", bind.bindType, bind.value.axis);
+
                 _this->mappings[_this->current_mapping_index].bind = bind;
                 ++_this->current_mapping_index;
-                SDL_Log("Next mapping\n");
+                SDL_Log("Next mapping - %d\n", _this->current_mapping_index);
             }
+            _this->duplicate_mapping = SDL_FALSE;
             if (_this->current_mapping_index >= NUM_MAPPINGS) {
                 _SaveMappings();
                 _StopMapping();
@@ -372,6 +396,9 @@ OVL_UpdateFrame()
 {
     CHECK_INIT()
 
+    SDL_SetRenderTarget(_this->overlay,
+                        _this->overlay_texture);
+
     // Test frame update
     SDL_SetRenderDrawColor(_this->overlay,
                            255,
@@ -391,6 +418,7 @@ OVL_GL_SwapWindow(SDL_Window* window)
     CHECK_INIT(SDL_FALSE)
 
 	if (_this->open) {
+        OVL_UpdateFrame();
         SDL_Renderer* renderer = SDL_CreateRenderer(window, 
                                     -1, SDL_RENDERER_ACCELERATED);
         SDL_RenderCopy(renderer, _this->overlay_texture, NULL, NULL);
@@ -408,6 +436,7 @@ OVL_RenderPresent(SDL_Renderer* renderer)
     CHECK_INIT(SDL_FALSE)
 
 	if (_this->open) {
+        OVL_UpdateFrame();
         SDL_RenderCopy(renderer, _this->overlay_texture, NULL, NULL);
 	}
 
