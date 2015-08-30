@@ -3,6 +3,7 @@
 #ifdef SDL_OVERLAY
 
 #include "SDL_stdinc.h"
+#include "SDL.h"
 #include "SDL_events.h"
 #include "SDL_opengl.h"
 #include "SDL_render.h"
@@ -82,7 +83,21 @@ void _ResetMappings()
 SDL_bool
 OVL_Init(const char* theme_dir, const char* language)
 {
-    _this = SDL_calloc(sizeof(*_this), 0);
+    Uint32 mask = SDL_INIT_VIDEO |
+                  SDL_INIT_GAMECONTROLLER |
+                  SDL_INIT_JOYSTICK;
+
+    if (SDL_WasInit(mask) != mask) {
+        SDL_SetError("SDL not initialized"); \
+        return SDL_FALSE;
+    }
+
+    _this = SDL_calloc(1, sizeof(*_this));
+
+    if (_this == NULL) {
+        SDL_OutOfMemory();
+        return SDL_FALSE;
+    }
 
     SDL_CreateWindowAndRenderer(1,
                                 1,

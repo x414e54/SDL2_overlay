@@ -17,7 +17,8 @@ extern "C" {
  *
  * \return True if subsystem was init successfully
  */
-extern DECLSPEC SDL_bool SDLCALL OVL_Init(const char* theme_dir);
+extern DECLSPEC SDL_bool SDLCALL OVL_Init(const char* theme_dir,
+                                          const char* language);
 
 /**
  * This function cleans up the Overlay subsystem
