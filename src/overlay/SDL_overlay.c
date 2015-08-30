@@ -183,6 +183,16 @@ static int _SaveMappings()
     SDL_Log("Mapping: %s\n", bind);
 }
 
+static void _CloseOverlay()
+{
+    if (_this->currentEventFilter != NULL) {
+	    SDL_SetEventFilter(_this->currentEventFilter,
+                           _this->currentEventFilterData);
+    }    
+	_this->open = SDL_FALSE;
+    SDL_Log("Overlay closed\n");
+}
+
 static int _EventFilter(void* userdata, SDL_Event* event)
 {
     CHECK_INIT(0)
@@ -198,6 +208,15 @@ static int _EventFilter(void* userdata, SDL_Event* event)
     // Not thread safe!
 
     switch(event->type) {
+    case SDL_KEYDOWN:
+        {
+            int key = event->key.keysym.sym;
+            if (key == SDLK_ESCAPE || key == SDLK_TAB) {
+                _StopMapping();
+                _CloseOverlay();
+            }
+        }
+        break;
 //  Ignored Events
     case SDL_JOYBUTTONUP:
     case SDL_CONTROLLERBUTTONUP:
@@ -302,16 +321,6 @@ static int _EventFilter(void* userdata, SDL_Event* event)
     }
 
     return 1;
-}
-
-static void _CloseOverlay()
-{
-    if (_this->currentEventFilter != NULL) {
-	    SDL_SetEventFilter(_this->currentEventFilter,
-                           _this->currentEventFilterData);
-    }    
-	_this->open = SDL_FALSE;
-    SDL_Log("Overlay closed\n");
 }
 
 void
