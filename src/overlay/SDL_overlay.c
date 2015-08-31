@@ -83,6 +83,13 @@ void _ResetMappings()
         {SDL_CONTROLLER_BINDTYPE_BUTTON, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, EMPTY_BIND}*/
 }
 
+static const char* Config()
+{
+    static char config[];
+    SDL_GetPrefPath("SDL", "");
+    return config_dir;
+}
+
 SDL_bool
 OVL_Init(const char* theme_dir, const char* language)
 {
@@ -113,6 +120,7 @@ OVL_Init(const char* theme_dir, const char* language)
                         SDL_TEXTUREACCESS_TARGET,
                         800, 600);
 
+    SDL_GameControllerAddMappingsFromRW(Config());
     return SDL_TRUE;
 }
 
@@ -129,6 +137,33 @@ static void _StopMapping()
     }
     _ResetMappings();
     SDL_Log("Mapping finished\n");
+}
+
+static _WriteMapping(const char* file, const char* mapping)
+{
+    SDL_RWops *in = SDL_RWFromFile(file, "rb");
+    SDL_RWops *out = SDL_RWFromFile(file . tmp, "rb");
+
+    while (line < buf + db_size) {
+        line_end = SDL_strchr(line, '\n');
+        if (line_end != NULL) {
+            *line_end = '\0';
+        } else {
+            line_end = buf + db_size;
+        }
+        
+        if (stcmp(line_end, mapping)) {
+            SDL_RWwrite(out, mapping, 1, strlen(mapping));
+        } else {
+            SDL_RWwrite(out, line_end, 1, strlen(mapping));
+        }
+        
+        line = line_end + 1;
+    }
+
+    SDL_RWclose(in);
+    SDL_RWclose(out);
+    mv(file, file.tmp);
 }
 
 static int _SaveMappings()
@@ -178,9 +213,10 @@ static int _SaveMappings()
         snprintf(bind, 2056 - index, "%s:%s,", to, from);
         index += strlen(to) + strlen(from);
     }
-    SDL_GameControllerAddMapping(bind);
-    // TODO Save to file
+
     SDL_Log("Mapping: %s\n", bind);
+    SDL_GameControllerAddMapping(bind);
+    _WriteMapping(GetConfig(), bind);
 }
 
 static void _CloseOverlay()
