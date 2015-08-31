@@ -58,13 +58,6 @@ extern DECLSPEC SDL_bool SDLCALL OVL_PresentOverlay();
  */
 extern DECLSPEC SDL_bool SDLCALL OVL_GL_SwapWindow(SDL_Window* window);
 
-/**
- * Replace calls to SDL_RenderPresent with this.
- *
- * \return False on error.
- */
-extern DECLSPEC SDL_bool SDLCALL OVL_RenderPresent(SDL_Renderer* window);
-
 /* Ends C function definitions when using C++ */
 #ifdef __cplusplus
 }

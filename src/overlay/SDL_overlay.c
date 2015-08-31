@@ -31,9 +31,8 @@ struct OVL_Overlay
 	SDL_EventFilter currentEventFilter;
 	void* currentEventFilterData;
 	SDL_bool open;
-	SDL_Renderer* overlay;
 	SDL_Window* overlay_window;
-	SDL_Texture* overlay_texture;
+	SDL_GLContext overlay_context;
 
     // GameController Config
     SDL_GameController* controller;
@@ -102,17 +101,15 @@ OVL_Init(const char* theme_dir, const char* language)
         return SDL_FALSE;
     }
 
-    SDL_CreateWindowAndRenderer(1,
-                                1,
-                                SDL_WINDOW_HIDDEN,
-                                &_this->overlay_window,
-                                &_this->overlay);
-
-    _this->overlay_texture = SDL_CreateTexture(_this->overlay,
-                        SDL_PIXELFORMAT_BGRA8888,
-                        SDL_TEXTUREACCESS_TARGET,
-                        800, 600);
-
+	SDL_Window* window = SDL_GL_GetCurrentWindow();
+	SDL_GLContext context = SDL_GL_GetCurrentContext();
+	
+    _this->overlay_window = SDL_CreateWindow("Overlay", 0, 0, 1, 1,
+											 SDL_WINDOW_HIDDEN);
+    _this->overlay_context = SDL_GL_CreateContext(_this->overlay_window);
+	
+	SDL_GL_MakeCurrent(window, context);
+	
     return SDL_TRUE;
 }
 
@@ -332,8 +329,7 @@ OVL_Quit()
         _CloseOverlay();
     }
 
-    SDL_DestroyTexture(_this->overlay_texture);
-    SDL_DestroyRenderer(_this->overlay);
+    SDL_GL_DeleteContext(_this->overlay_context);
     SDL_DestroyWindow(_this->overlay_window);
     SDL_free(_this);
 }
@@ -405,20 +401,6 @@ OVL_UpdateFrame()
 {
     CHECK_INIT()
 
-    SDL_SetRenderTarget(_this->overlay,
-                        _this->overlay_texture);
-
-    // Test frame update
-    SDL_SetRenderDrawColor(_this->overlay,
-                           255,
-                           0,
-                           0,
-                           255);
-    SDL_Rect rect;
-    SDL_zero(rect);
-    rect.w = 100;
-    rect.h = 100;
-    SDL_RenderFillRect(_this->overlay, &rect);
 }
 
 SDL_bool
@@ -427,30 +409,16 @@ OVL_GL_SwapWindow(SDL_Window* window)
     CHECK_INIT(SDL_FALSE)
 
 	if (_this->open) {
+		SDL_Window* window = SDL_GL_GetCurrentWindow();
+		SDL_GLContext context = SDL_GL_GetCurrentContext();
+		
         OVL_UpdateFrame();
-        SDL_Renderer* renderer = SDL_CreateRenderer(window, 
-                                    -1, SDL_RENDERER_ACCELERATED);
-        SDL_RenderCopy(renderer, _this->overlay_texture, NULL, NULL);
-        SDL_RenderPresent(renderer);
-        SDL_DestroyRenderer(renderer);
+		
+		SDL_GL_MakeCurrent(window, context);
 	} else {
 		SDL_GL_SwapWindow(window);
         return SDL_TRUE;
 	}
-}
-
-SDL_bool
-OVL_RenderPresent(SDL_Renderer* renderer)
-{
-    CHECK_INIT(SDL_FALSE)
-
-	if (_this->open) {
-        OVL_UpdateFrame();
-        SDL_RenderCopy(renderer, _this->overlay_texture, NULL, NULL);
-	}
-
-	SDL_RenderPresent(renderer);
-    return SDL_TRUE;
 }
 #endif /* SDL_OVERLAY */
 
